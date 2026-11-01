@@ -14,6 +14,7 @@ from tsp import (
     generate_subproblems,
     partition_tasks,
     solve_tsp_sequential,
+    save_tsp_plot,
 )
 from utils import http_post_json, http_get_json, send_json_response, parse_json_request
 
@@ -99,6 +100,14 @@ class Coordinator:
         print(f"  RESOLVENDO TSP DE FORMA DISTRIBUIDA ({num_cities} CIDADES)")
         print("=" * 70)
 
+        # 0. Verifica quais workers realmente responderam ao health check
+        worker_health = self.check_workers()
+        active_workers = [url for url, ok, _ in worker_health if ok]
+        if not active_workers:
+            raise RuntimeError("Nenhum worker esta respondendo ao /health. Inicie os workers antes de rodar o coordenador!")
+        if len(active_workers) < len(self.worker_urls):
+            print(f"[!] AVISO: Apenas {len(active_workers)} de {len(self.worker_urls)} workers responderam. Distribuindo tarefas entre os ativos.")
+
         # 1. Gera cidades e matriz de distancia
         cities = generate_tsp_instance(num_cities=num_cities, seed=seed)
         dist_matrix = compute_distance_matrix(cities)
@@ -113,14 +122,14 @@ class Coordinator:
             print(f"    -> Custo sequencial: {seq_result['best_cost']}")
             print(f"    -> Tempo sequencial: {seq_result['execution_time_sec']}s")
 
-        # 3. Gera os prefixos e reparte entre os workers
+        # 3. Gera os prefixos e reparte entre os workers ativos
         prefixes = generate_subproblems(num_cities=num_cities, prefix_depth=prefix_depth)
-        num_workers = len(self.worker_urls)
+        num_workers = len(active_workers)
         partitions = partition_tasks(prefixes, num_partitions=num_workers)
 
         print(f"[*] Dividiu a busca em {len(prefixes)} prefixos (profundidade {prefix_depth}).")
-        print(f"[*] Repartindo entre {num_workers} workers cadastrados:")
-        for i, url in enumerate(self.worker_urls):
+        print(f"[*] Repartindo entre {num_workers} workers ativos:")
+        for i, url in enumerate(active_workers):
             print(f"    - Worker {i+1} ({url}): {len(partitions[i])} prefixos de rota")
 
         # 4. Dispara as requisicoes HTTP pros workers ao mesmo tempo usando threads
@@ -135,7 +144,7 @@ class Coordinator:
 
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             future_to_task = {}
-            for idx, worker_url in enumerate(self.worker_urls):
+            for idx, worker_url in enumerate(active_workers):
                 task_id = f"batch_{idx + 1}"
                 task_prefixes = partitions[idx]
                 future = executor.submit(
@@ -166,6 +175,12 @@ class Coordinator:
 
         dist_elapsed = time.perf_counter() - dist_start_time
         self.clock.tick("AGREGACAO_RESULTADOS_FIM")
+
+        # Gera o grafico 2D da rota otima se tiver matplotlib
+        if global_best_route:
+            plot_ok = save_tsp_plot(cities, global_best_route, "relatorio/rota_otima.png")
+            if plot_ok:
+                print("[*] Grafico do circuito salvo em: relatorio/rota_otima.png")
 
         # 5. Calcula as metricas de speedup e eficiencia
         speedup = None

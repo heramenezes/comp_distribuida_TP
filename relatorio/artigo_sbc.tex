@@ -30,9 +30,10 @@
 
 \title{Sistema Distribuído para Resolução do Problema do Caixeiro Viajante Utilizando Web Services e Relógios Lógicos de Lamport}
 
+% PREENCHA COM OS NOMES DOS INTEGRANTES DO SEU GRUPO (4 a 6 pessoas):
 \author{
-  Integrante 1\inst{1}, Integrante 2\inst{1}, Integrante 3\inst{1}, \\
-  Integrante 4\inst{1}, Integrante 5\inst{1}
+  [Nome Integrante 1]\inst{1}, [Nome Integrante 2]\inst{1}, [Nome Integrante 3]\inst{1}, \\
+  [Nome Integrante 4]\inst{1}, [Nome Integrante 5]\inst{1}
 }
 
 \address{
@@ -72,7 +73,7 @@ O sistema foi concebido segundo o modelo arquitetural Coordenador-Trabalhadores 
 
 \subsection{Papel das Entidades}
 \begin{itemize}
-    \item \textbf{Nó Coordenador (\textit{Coordinator}):} Entidade central responsável por gerar a matriz de distâncias euclidianas, decompor o espaço de busca global em subproblemas (definidos por prefixos de caminhos fixos, como $[0, c_1, c_2]$), despachar tarefas concorrentemente para os nós trabalhadores e consolidar o mínimo global.
+    \item \textbf{Nó Coordenador (\textit{Coordinator}):} Entidade central responsável por gerar a matriz de distâncias euclidianas, decompor o espaço de busca global em subproblemas (definidos por prefixos de caminhos fixos, como $[0, c_1, c_2]$), despachar tarefas concorrentemente para os nós trabalhadores ativos e consolidar o mínimo global.
     \item \textbf{Nós Trabalhadores (\textit{Workers}):} Servidores autônomos que expõem endpoints HTTP. Ao receber um lote de tarefas, cada nó executa o algoritmo de \textit{Branch-and-Bound} com poda local e devolve a melhor rota encontrada, as métricas de poda e seu relógio lógico atualizado.
 \end{itemize}
 
@@ -97,10 +98,10 @@ A comunicação é síncrona e interoperável sobre HTTP/1.1. As principais mens
   "worker_id": "worker-1",
   "sender_clock": 8,
   "task_id": "batch_1",
-  "best_cost": 275.5284,
+  "best_cost": 272.2616,
   "best_route": [0, 4, 11, ..., 0],
-  "evaluated_paths": 1463,
-  "pruned_branches": 5973237
+  "evaluated_paths": 1639,
+  "pruned_branches": 1758488
 }
 \end{lstlisting}
 \end{enumerate}
@@ -141,15 +142,15 @@ Coordenador & LOCAL   & Início Benchmark Sequencial        & $1 \to 2$ \\
 Coordenador & LOCAL   & Fim Benchmark Sequencial           & $2 \to 3$ \\
 Coordenador & ENVIO   & Despacho Tarefa 1 $\to$ Worker 1   & $4 \to 5$ \\
 Coordenador & ENVIO   & Despacho Tarefa 2 $\to$ Worker 2   & $5 \to 6$ \\
-Worker 1    & RECEPÇÃO& Mensagem da Tarefa 1 Recebida     & $1 \to 6$ ($\max(1, 5)+1$) \\
+Worker 1    & RECEPÇÃO& Mensagem da Tarefa 1 Recebida     & $2 \to 6$ ($\max(2, 5)+1$) \\
 Worker 1    & LOCAL   & Fim do Cálculo Branch-and-Bound    & $6 \to 7$ \\
-Worker 2    & RECEPÇÃO& Mensagem da Tarefa 2 Recebida     & $1 \to 7$ ($\max(1, 6)+1$) \\
+Worker 2    & RECEPÇÃO& Mensagem da Tarefa 2 Recebida     & $2 \to 7$ ($\max(2, 6)+1$) \\
 Worker 1    & ENVIO   & Envio de Resultados $\to$ Coord    & $7 \to 8$ \\
 Worker 2    & LOCAL   & Fim do Cálculo Branch-and-Bound    & $7 \to 8$ \\
-Coordenador & RECEPÇÃO& Resposta Worker 1 Recebida         & $6 \to 9$ ($\max(6, 8)+1$) \\
 Worker 2    & ENVIO   & Envio de Resultados $\to$ Coord    & $8 \to 9$ \\
-Coordenador & RECEPÇÃO& Resposta Worker 2 Recebida         & $9 \to 10$ ($\max(9, 9)+1$) \\
-Coordenador & LOCAL   & Consolidação do Ótimo Global       & $10 \to 11$ \\ \bottomrule
+Coordenador & RECEPÇÃO& Resposta Worker 2 Recebida         & $6 \to 10$ ($\max(6, 9)+1$) \\
+Coordenador & RECEPÇÃO& Resposta Worker 1 Recebida         & $10 \to 11$ ($\max(10, 8)+1$) \\
+Coordenador & LOCAL   & Consolidação do Ótimo Global       & $11 \to 12$ \\ \bottomrule
 \end{tabular}
 \end{table}
 
@@ -169,11 +170,18 @@ Para validar a corretude e a aceleração, comparou-se a solução distribuída 
 \toprule
 \textbf{Cidades ($N$)} & \textbf{Custo Ótimo} & \textbf{Rotas Podadas} & \textbf{Tempo Seq.} & \textbf{Tempo Dist. (2 Nós)} & \textbf{Speedup} \\ \midrule
 11 & 272.1557 & 407.769    & 0,057 s & 0,075 s & 0,76$\times$ \\
-12 & 272.2616 & 1.542.880  & 0,221 s & 0,210 s & 1,05$\times$ \\
+12 & 272.2616 & 1.758.488  & 0,200 s & 0,283 s & 0,71$\times$ \\
 13 & 275.5284 & 5.973.237  & 0,583 s & 0,490 s & 1,19$\times$ \\
 14 & 284.9163 & 24.180.412 & 1,887 s & 1,280 s & 1,47$\times$ \\ \bottomrule
 \end{tabular}
 \end{table}
+
+\begin{figure}[htbp]
+\centering
+\IfFileExists{rota_otima.png}{\includegraphics[width=0.45\textwidth]{rota_otima.png}}{}
+\caption{Visualização do circuito ótimo do TSP encontrado pelos nós distribuídos.}
+\label{fig:rota}
+\end{figure}
 
 Conforme previsto na literatura \cite{tanenbaum2017}, para instâncias pequenas ($N \le 11$), o custo de abertura de conexões HTTP e serialização JSON supera o ganho da paralelização. À medida que o espaço de busca cresce ($N \ge 13$), o tempo computacional predomina e o sistema alcança ganhos expressivos de \textit{speedup}.
 
@@ -189,11 +197,11 @@ Conforme previsto na literatura \cite{tanenbaum2017}, para instâncias pequenas 
 % -----------------------------------------------------------------------------
 A condução do trabalho foi distribuída de forma equilibrada entre os membros do grupo:
 \begin{itemize}
-    \item \textbf{Integrante 1:} Concepção da arquitetura distribuída Mestre-Trabalhador e desenvolvimento do módulo do Coordenador (\texttt{coordinator.py}).
-    \item \textbf{Integrante 2:} Implementação dos Web Services do nó Trabalhador (\texttt{worker.py}) e das rotas RESTful HTTP.
-    \item \textbf{Integrante 3:} Implementação matemática e thread-safe do Relógio Lógico de Lamport (\texttt{clock.py}) e integração causal.
-    \item \textbf{Integrante 4:} Modelagem do algoritmo TSP, cálculo de matrizes de adjacência e mecanismo de poda \textit{Branch-and-Bound} (\texttt{tsp.py}).
-    \item \textbf{Integrante 5:} Criação da suíte de testes unitários (\texttt{test\_system.py}), scripts de execução multi-processo e consolidação do relatório técnico.
+    \item \textbf{[Nome Aluno 1]:} Concepção da arquitetura distribuída Mestre-Trabalhador e desenvolvimento do módulo do Coordenador (\texttt{coordinator.py}).
+    \item \textbf{[Nome Aluno 2]:} Implementação dos Web Services do nó Trabalhador (\texttt{worker.py}) e das rotas RESTful HTTP.
+    \item \textbf{[Nome Aluno 3]:} Implementação matemática e thread-safe do Relógio Lógico de Lamport (\texttt{clock.py}) e integração causal.
+    \item \textbf{[Nome Aluno 4]:} Modelagem do algoritmo TSP, cálculo de matrizes de adjacência e mecanismo de poda \textit{Branch-and-Bound} (\texttt{tsp.py}).
+    \item \textbf{[Nome Aluno 5]:} Criação da suíte de testes unitários (\texttt{test\_system.py}), scripts de execução multi-processo e consolidação do relatório técnico.
 \end{itemize}
 
 % -----------------------------------------------------------------------------
@@ -226,4 +234,3 @@ Tese de Doutorado, University of California, Irvine.
 \end{thebibliography}
 
 \end{document}
-

@@ -95,6 +95,20 @@ class LamportClock:
         with self._lock:
             return list(self._history)
 
+    # Ordenacao total de Lamport: desempata pelo ID do no quando os relogios forem iguais
+    @staticmethod
+    def compare_events(event_a: Dict[str, Any], event_b: Dict[str, Any]) -> int:
+        clock_a = event_a.get("clock_after", 0)
+        clock_b = event_b.get("clock_after", 0)
+        if clock_a < clock_b:
+            return -1
+        elif clock_a > clock_b:
+            return 1
+        else:
+            node_a = event_a.get("node_id", "")
+            node_b = event_b.get("node_id", "")
+            return -1 if node_a < node_b else (1 if node_a > node_b else 0)
+
     # funcao simples pra printar bonitinho no terminal
     def format_log(self, limit: int = 10) -> str:
         with self._lock:

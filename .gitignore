@@ -13,6 +13,8 @@ ENV/
 # IDEs
 .vscode/
 .idea/
+fontlist*.json
+tests/fontlist*.json
 
 # LaTeX auxiliary files (if compiled locally)
 *.aux
@@ -22,3 +24,4 @@ ENV/
 *.synctex.gz
 *.fls
 *.fdb_latexmk
+

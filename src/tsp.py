@@ -146,3 +146,41 @@ def solve_tsp_sequential(dist_matrix: List[List[float]]) -> Dict[str, Any]:
     num_cities = len(dist_matrix)
     prefixes = generate_subproblems(num_cities, prefix_depth=1)
     return solve_tsp_branch_and_bound(dist_matrix, prefixes)
+
+
+# Gera um grafico bonitinho da rota achada se tiver o matplotlib instalado
+def save_tsp_plot(cities: List[Tuple[float, float]], route: List[int], output_path: str = "relatorio/rota_otima.png") -> bool:
+    try:
+        import os
+        # Evita erro de pasta de cache em sandbox
+        os.environ["MPLCONFIGDIR"] = os.path.abspath("tests")
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
+        xs = [cities[c][0] for c in route]
+        ys = [cities[c][1] for c in route]
+
+        plt.figure(figsize=(7, 6))
+        plt.plot(xs, ys, 'o--', color='#2b5c8f', linewidth=1.5, markersize=8, label="Circuito Otimo")
+
+        # Destaca a cidade inicial (0)
+        plt.plot(xs[0], ys[0], 's', color='#d9381e', markersize=10, label="Inicio / Fim (Cidade 0)")
+
+        # Coloca o numero de cada cidade perto do ponto
+        for idx, (x, y) in enumerate(cities):
+            plt.text(x + 1.2, y + 1.2, f"{idx}", fontsize=9, fontweight='bold', color='#222222')
+
+        plt.title(f"Solucao Distribuida do TSP ({len(cities)} Cidades)", fontsize=12, fontweight='bold')
+        plt.xlabel("Coordenada X")
+        plt.ylabel("Coordenada Y")
+        plt.grid(True, linestyle=":", alpha=0.6)
+        plt.legend(loc="upper right")
+        plt.tight_layout()
+
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        plt.savefig(output_path, dpi=200)
+        plt.close()
+        return True
+    except Exception:
+        return False
