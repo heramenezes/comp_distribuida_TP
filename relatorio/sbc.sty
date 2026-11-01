@@ -1,0 +1,75 @@
+% SBC style file
+% Society of Brazilian Computer (Sociedade Brasileira de Computação)
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{sbc}[2003/03/21 SBC conference style]
+
+\RequirePackage[utf8]{inputenc}
+\RequirePackage[T1]{fontenc}
+\RequirePackage{times}
+
+\setlength{\paperheight}{297mm}
+\setlength{\paperwidth}{210mm}
+
+\setlength{\textwidth}{150mm}
+\setlength{\textheight}{237mm}
+\setlength{\topmargin}{-10mm}
+\setlength{\oddsidemargin}{5mm}
+\setlength{\evensidemargin}{5mm}
+\setlength{\headheight}{0mm}
+\setlength{\headsep}{0mm}
+\setlength{\topskip}{0mm}
+\setlength{\footskip}{15mm}
+
+\setlength{\parindent}{1.27cm}
+\setlength{\parskip}{0pt}
+
+\flushbottom
+
+\def\address#1{\gdef\@address{#1}}
+\def\email#1{\gdef\@email{#1}}
+
+\def\maketitle{\par
+ \begingroup
+ \def\thefootnote{\fnsymbol{footnote}}
+ \def\@makefnmark{\hbox to 0pt{$^{\@thefnmark}$\hss}}
+ \long\def\@makefntext##1{\parindent 1em\noindent
+ \hbox to1.8em{\hss$\m@th^{\@thefnmark}$}##1}
+ \@maketitle \@thanks
+ \endgroup
+ \setcounter{footnote}{0}
+ \let\maketitle\relax \let\@maketitle\relax
+ \gdef\@thanks{}\gdef\@author{}\gdef\@title{}\let\thanks\relax}
+
+\def\@maketitle{\newpage
+ \null
+ \begin{center}
+  \vspace{0cm}
+  {\Large \bf \@title \par}
+  \vspace{1.5em}
+  {\large \lineskip .5em
+   \begin{tabular}[t]{c}\@author
+   \end{tabular}\par}
+  \vspace{1em}
+  {\small \@address \par}
+  \vspace{0.5em}
+  {\small \tt \@email \par}
+ \end{center}
+ \par
+ \vspace{1.5em}}
+
+\renewenvironment{abstract}{%
+      \begin{center}%
+        {\bfseries \abstractname\vspace{-.5em}\vspace{0pt}}%
+      \end{center}%
+      \itshape\quotation}
+      {\endquotation}
+
+\newenvironment{resumo}{%
+      \begin{center}%
+        {\bfseries Resumo\vspace{-.5em}\vspace{0pt}}%
+      \end{center}%
+      \itshape\quotation}
+      {\endquotation}
+
+\endinput
+

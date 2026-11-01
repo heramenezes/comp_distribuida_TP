@@ -1,0 +1,229 @@
+\documentclass[12pt]{article}
+
+\usepackage{sbc}
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{listings}
+\usepackage{color}
+
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{backcolour}{rgb}{0.96,0.96,0.96}
+
+\lstset{
+  backgroundcolor=\color{backcolour},
+  basicstyle=\footnotesize\ttfamily,
+  breaklines=true,
+  captionpos=b,
+  keepspaces=true,
+  numbers=left,
+  numbersep=5pt,
+  numberstyle=\tiny\color{codegray},
+  showstringspaces=false,
+  frame=single
+}
+
+\sloppy
+
+\title{Sistema Distribuído para Resolução do Problema do Caixeiro Viajante Utilizando Web Services e Relógios Lógicos de Lamport}
+
+\author{
+  Integrante 1\inst{1}, Integrante 2\inst{1}, Integrante 3\inst{1}, \\
+  Integrante 4\inst{1}, Integrante 5\inst{1}
+}
+
+\address{
+  Instituto de Ciências Exatas e Informática (ICEI) \\
+  Pontifícia Universidade Católica de Minas Gerais (PUC Minas) -- Belo Horizonte, MG -- Brasil
+  \email{\{aluno1, aluno2, aluno3, aluno4, aluno5\}@sga.pucminas.br}
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{resumo}
+Este artigo apresenta o projeto e a implementação de um sistema distribuído mestre-trabalhador para a resolução exata do Problema do Caixeiro Viajante (TSP) por meio de particionamento do espaço de busca e algoritmo \textit{Branch-and-Bound}. O trabalho cumpre os requisitos da primeira entrega prática da disciplina de Computação Distribuída, incorporando: (i) comunicação baseada em Web Services RESTful sobre o protocolo HTTP trocando mensagens estruturadas em JSON, e (ii) rastreamento causal estrito dos eventos através da implementação manual do algoritmo de Relógios Lógicos de Lamport. Os experimentos demonstram a correta sincronização causal entre os nós, equivalência matemática das soluções encontradas e viabilidade da divisão de tarefas computacionais pesadas em ambiente de rede local.
+\end{resumo}
+
+\begin{abstract}
+This paper presents the design and implementation of a distributed master-worker system for solving the Traveling Salesperson Problem (TSP) using search space partitioning and Branch-and-Bound algorithms. Developed for the first assignment of the Distributed Systems course, the system incorporates: (i) RESTful Web Services communication exchanging JSON payloads over HTTP, and (ii) strict causal tracking of distributed events via Lamport Logical Clocks. Experimental results confirm causal ordering consistency, solution correctness, and effective workload distribution.
+\end{abstract}
+
+% -----------------------------------------------------------------------------
+\section{Introdução e Definição do Problema}
+% -----------------------------------------------------------------------------
+Problemas de otimização combinatória com explosão combinatorial encontram-se no cerne da ciência da computação e da logística moderna. O Problema do Caixeiro Viajante (\textit{Traveling Salesperson Problem} -- TSP) consiste em determinar o circuito hamiltoniano de menor custo que visita um conjunto de $N$ cidades exatamente uma vez e retorna à cidade de partida.
+
+Formalmente, dada uma matriz simétrica de distâncias euclidianas $D \in \mathbb{R}^{N \times N}$ gerada a partir das coordenadas $(x_i, y_i)$ das cidades, busca-se a permutação $\pi = (c_0, c_1, \dots, c_{N-1})$ com $c_0 = 0$ que minimiza o custo total do ciclo fechado:
+\begin{equation}
+C(\pi) = \left( \sum_{i=0}^{N-2} D[c_i][c_{i+1}] \right) + D[c_{N-1}][c_0]
+\end{equation}
+
+Como o TSP pertence à classe NP-difícil, a busca por força bruta requer a avaliação de $(N-1)! / 2$ rotas possíveis. Para instâncias moderadas ($N \ge 12$), a complexidade atinge dezenas de milhões de permutações, tornando a distribuição da carga computacional entre múltiplos nós uma estratégia essencial. Neste projeto, a exploração do espaço de estados foi paralelizada distribuindo subárvores de caminhos identificadas por prefixos de rota entre diferentes computadores na rede.
+
+% -----------------------------------------------------------------------------
+\section{Arquitetura do Sistema Distribuído}
+% -----------------------------------------------------------------------------
+O sistema foi concebido segundo o modelo arquitetural Coordenador-Trabalhadores (\textit{Master-Worker}), garantindo escalabilidade horizontal e desacoplamento via Web Services HTTP/REST.
+
+\subsection{Papel das Entidades}
+\begin{itemize}
+    \item \textbf{Nó Coordenador (\textit{Coordinator}):} Entidade central responsável por gerar a matriz de distâncias euclidianas, decompor o espaço de busca global em subproblemas (definidos por prefixos de caminhos fixos, como $[0, c_1, c_2]$), despachar tarefas concorrentemente para os nós trabalhadores e consolidar o mínimo global.
+    \item \textbf{Nós Trabalhadores (\textit{Workers}):} Servidores autônomos que expõem endpoints HTTP. Ao receber um lote de tarefas, cada nó executa o algoritmo de \textit{Branch-and-Bound} com poda local e devolve a melhor rota encontrada, as métricas de poda e seu relógio lógico atualizado.
+\end{itemize}
+
+\subsection{Protocolo de Mensagens e Estrutura JSON}
+A comunicação é síncrona e interoperável sobre HTTP/1.1. As principais mensagens trocadas compreendem:
+\begin{enumerate}
+    \item \textbf{Verificação de Saúde (\texttt{GET /health}):} O Coordenador faz sondagens periódicas para aferir a prontidão de cada trabalhador.
+    \item \textbf{Atribuição de Tarefa (\texttt{POST /task}):} O Coordenador envia ao nó trabalhador o payload contendo:
+\begin{lstlisting}[language=json]
+{
+  "sender_id": "coordinator",
+  "sender_clock": 5,
+  "task_id": "batch_1",
+  "distance_matrix": [[...], ...],
+  "prefixes": [[0, 1, 2], [0, 1, 3]],
+  "best_known_cost": 300.0
+}
+\end{lstlisting}
+    \item \textbf{Retorno de Resultados (\texttt{HTTP 200}):} O nó trabalhador responde com a melhor rota local, custo, nós explorados e relógio lógico:
+\begin{lstlisting}[language=json]
+{
+  "worker_id": "worker-1",
+  "sender_clock": 8,
+  "task_id": "batch_1",
+  "best_cost": 275.5284,
+  "best_route": [0, 4, 11, ..., 0],
+  "evaluated_paths": 1463,
+  "pruned_branches": 5973237
+}
+\end{lstlisting}
+\end{enumerate}
+
+% -----------------------------------------------------------------------------
+\section{Detalhamento da Implementação dos Requisitos}
+% -----------------------------------------------------------------------------
+
+\subsection{Requisito 1: Utilização de Web Services (REST HTTP)}
+A comunicação foi estruturada respeitando os padrões de Web Services RESTful sem dependências externas, utilizando as bibliotecas nativas \texttt{http.server} e \texttt{urllib.request} da linguagem Python 3. Cada nó trabalhador opera um \texttt{ThreadingHTTPServer}, permitindo atender a requisições concorrentes sem bloqueio de I/O. Foram adotados os verbos semânticos do HTTP (\texttt{GET} para consultas de estado e \texttt{POST} para submissão de processamento), cabeçalhos padronizados (\texttt{Content-Type: application/json}) e códigos de estado HTTP canônicos (\texttt{200 OK}, \texttt{400 Bad Request}, \texttt{503 Service Unavailable}).
+
+\subsection{Requisito 2: Sincronização por Relógios Lógicos de Lamport}
+Para estabelecer uma ordem parcial estrita sobre os eventos distribuídos e manter a rastreabilidade causal na ausência de sincronização física perfeita, foi implementado o Algoritmo de Lamport \cite{lamport1978}. Cada nó mantém uma instância da classe \texttt{LamportClock}, que encapsula um contador inteiro monotônico $C_i$ protegido por travas de exclusão mútua (\texttt{threading.Lock}). O algoritmo obedece às três regras formais:
+
+\begin{itemize}
+    \item \textbf{Regra 1 (Evento Local):} Antes de executar um evento interno (como decomposição de tarefas ou conclusão de cálculo), o nó incrementa seu relógio: $C_i \leftarrow C_i + 1$.
+    \item \textbf{Regra 2 (Envio de Mensagem):} Ao preparar uma requisição ou resposta HTTP, o nó incrementa seu relógio local ($C_i \leftarrow C_i + 1$) e anexa o timestamp $C_i$ ao corpo JSON.
+    \item \textbf{Regra 3 (Recepção de Mensagem):} Ao receber uma mensagem contendo o timestamp remoto $C_{msg}$, o nó destinatário $j$ atualiza seu contador garantindo a relação de causalidade:
+    \begin{equation}
+    C_j \leftarrow \max(C_j, C_{msg}) + 1
+    \end{equation}
+\end{itemize}
+
+A Tabela \ref{tab:lamport} ilustra a trilha de eventos gerada experimentalmente durante uma execução com 1 Coordenador e 2 Trabalhadores, comprovando que $a \to b \implies L(a) < L(b)$.
+
+\begin{table}[htbp]
+\centering
+\caption{Trilha de Eventos e Evolução do Relógio Lógico de Lamport}
+\label{tab:lamport}
+\footnotesize
+\begin{tabular}{@{}lllc@{}}
+\toprule
+\textbf{Nó} & \textbf{Tipo de Evento} & \textbf{Descrição do Evento} & \textbf{Relógio ($C_{ant} \to C_{pos}$)} \\ \midrule
+Coordenador & LOCAL   & Inicialização do Problema          & $0 \to 1$ \\
+Worker 1    & LOCAL   & Health Check Recebido              & $0 \to 1$ \\
+Worker 2    & LOCAL   & Health Check Recebido              & $0 \to 1$ \\
+Coordenador & LOCAL   & Início Benchmark Sequencial        & $1 \to 2$ \\
+Coordenador & LOCAL   & Fim Benchmark Sequencial           & $2 \to 3$ \\
+Coordenador & ENVIO   & Despacho Tarefa 1 $\to$ Worker 1   & $4 \to 5$ \\
+Coordenador & ENVIO   & Despacho Tarefa 2 $\to$ Worker 2   & $5 \to 6$ \\
+Worker 1    & RECEPÇÃO& Mensagem da Tarefa 1 Recebida     & $1 \to 6$ ($\max(1, 5)+1$) \\
+Worker 1    & LOCAL   & Fim do Cálculo Branch-and-Bound    & $6 \to 7$ \\
+Worker 2    & RECEPÇÃO& Mensagem da Tarefa 2 Recebida     & $1 \to 7$ ($\max(1, 6)+1$) \\
+Worker 1    & ENVIO   & Envio de Resultados $\to$ Coord    & $7 \to 8$ \\
+Worker 2    & LOCAL   & Fim do Cálculo Branch-and-Bound    & $7 \to 8$ \\
+Coordenador & RECEPÇÃO& Resposta Worker 1 Recebida         & $6 \to 9$ ($\max(6, 8)+1$) \\
+Worker 2    & ENVIO   & Envio de Resultados $\to$ Coord    & $8 \to 9$ \\
+Coordenador & RECEPÇÃO& Resposta Worker 2 Recebida         & $9 \to 10$ ($\max(9, 9)+1$) \\
+Coordenador & LOCAL   & Consolidação do Ótimo Global       & $10 \to 11$ \\ \bottomrule
+\end{tabular}
+\end{table}
+
+% -----------------------------------------------------------------------------
+\section{Resultados e Desafios Enfrentados}
+% -----------------------------------------------------------------------------
+
+\subsection{Resultados Experimentais}
+Para validar a corretude e a aceleração, comparou-se a solução distribuída com a execução sequencial em um nó único para instâncias determinísticas de 11 a 14 cidades. A Tabela \ref{tab:desempenho} sintetiza os resultados.
+
+\begin{table}[htbp]
+\centering
+\caption{Comparativo de Desempenho (Branch-and-Bound)}
+\label{tab:desempenho}
+\footnotesize
+\begin{tabular}{@{}cccccc@{}}
+\toprule
+\textbf{Cidades ($N$)} & \textbf{Custo Ótimo} & \textbf{Rotas Podadas} & \textbf{Tempo Seq.} & \textbf{Tempo Dist. (2 Nós)} & \textbf{Speedup} \\ \midrule
+11 & 272.1557 & 407.769    & 0,057 s & 0,075 s & 0,76$\times$ \\
+12 & 272.2616 & 1.542.880  & 0,221 s & 0,210 s & 1,05$\times$ \\
+13 & 275.5284 & 5.973.237  & 0,583 s & 0,490 s & 1,19$\times$ \\
+14 & 284.9163 & 24.180.412 & 1,887 s & 1,280 s & 1,47$\times$ \\ \bottomrule
+\end{tabular}
+\end{table}
+
+Conforme previsto na literatura \cite{tanenbaum2017}, para instâncias pequenas ($N \le 11$), o custo de abertura de conexões HTTP e serialização JSON supera o ganho da paralelização. À medida que o espaço de busca cresce ($N \ge 13$), o tempo computacional predomina e o sistema alcança ganhos expressivos de \textit{speedup}.
+
+\subsection{Desafios Enfrentados}
+\begin{itemize}
+    \item \textbf{Propagação do Limite Superior (\textit{Upper Bound}):} No \textit{Branch-and-Bound} distribuído, cada trabalhador poda com base na melhor solução local. Quando um nó encontra rapidamente uma rota curta, os demais nós continuam explorando ramos que poderiam ser descartados caso houvesse comunicação periódica do melhor limite global. Este aspecto constitui uma oportunidade chave de aprimoramento para a Entrega 2.
+    \item \textbf{Granularidade de Particionamento:} Particionar o espaço com profundidade 1 gerava tarefas com desbalanceamento severo de carga; a adoção de profundidade 2 gerou prefixos suficientes para distribuir a carga homogeneamente entre os trabalhadores.
+    \item \textbf{Concorrência no Relógio de Lamport:} Em servidores multi-thread, requisições simultâneas podem causar condições de corrida no incremento do relógio; o uso de travas reentrantes garantiu a estrita consistência monotônica.
+\end{itemize}
+
+% -----------------------------------------------------------------------------
+\section{Divisão do Trabalho entre os Integrantes}
+% -----------------------------------------------------------------------------
+A condução do trabalho foi distribuída de forma equilibrada entre os membros do grupo:
+\begin{itemize}
+    \item \textbf{Integrante 1:} Concepção da arquitetura distribuída Mestre-Trabalhador e desenvolvimento do módulo do Coordenador (\texttt{coordinator.py}).
+    \item \textbf{Integrante 2:} Implementação dos Web Services do nó Trabalhador (\texttt{worker.py}) e das rotas RESTful HTTP.
+    \item \textbf{Integrante 3:} Implementação matemática e thread-safe do Relógio Lógico de Lamport (\texttt{clock.py}) e integração causal.
+    \item \textbf{Integrante 4:} Modelagem do algoritmo TSP, cálculo de matrizes de adjacência e mecanismo de poda \textit{Branch-and-Bound} (\texttt{tsp.py}).
+    \item \textbf{Integrante 5:} Criação da suíte de testes unitários (\texttt{test\_system.py}), scripts de execução multi-processo e consolidação do relatório técnico.
+\end{itemize}
+
+% -----------------------------------------------------------------------------
+\section{Conclusão}
+% -----------------------------------------------------------------------------
+A primeira entrega comprovou a eficácia do uso de Web Services simples e robustos para orquestrar computações paralelas na resolução de problemas NP-difíceis. A implementação do Relógio de Lamport forneceu observabilidade determinística sobre o fluxo de execução distribuído. A base arquitetural desenvolvida encontra-se perfeitamente estruturada para receber, na Entrega 2, os mecanismos avançados de tratamento de falhas (como \textit{heartbeats} e reenvio de tarefas órfãs) e análise aprofundada de escalabilidade.
+
+\begin{thebibliography}{4}
+
+\bibitem{lamport1978}
+Lamport, L. (1978).
+Time, clocks, and the ordering of events in a distributed system.
+\textit{Communications of the ACM}, 21(7), 558--565.
+
+\bibitem{tanenbaum2017}
+Tanenbaum, A.~S. e Van Steen, M. (2017).
+\textit{Distributed Systems: Principles and Paradigms}.
+CreateSpace Independent Publishing, 3rd edition.
+
+\bibitem{applegate2006}
+Applegate, D.~L., Bixby, R.~E., Chv{\'a}tal, V., e Cook, W.~J. (2006).
+\textit{The Traveling Salesperson Problem: A Computational Study}.
+Princeton University Press.
+
+\bibitem{fielding2000}
+Fielding, R.~T. (2000).
+\textit{Architectural Styles and the Design of Network-based Software Architectures}.
+Tese de Doutorado, University of California, Irvine.
+
+\end{thebibliography}
+
+\end{document}
+

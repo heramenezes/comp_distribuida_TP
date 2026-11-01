@@ -1,0 +1,7 @@
+# Este projeto foi desenvolvido utilizando 100% a biblioteca padrão do Python 3 (3.8+)
+# Nenhuma dependência externa obrigatória é necessária!
+#
+# (Opcional) Ferramentas para desenvolvimento e análise:
+# flake8>=6.0.0
+# black>=23.0.0
+# pytest>=7.0.0
